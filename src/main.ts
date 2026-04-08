@@ -50,11 +50,6 @@ async function transitionTo(state: State) {
     case "transcribing":
       recordingIndicator().classList.add("hidden");
       transcribingIndicator().classList.remove("hidden");
-      setTimeout(() => {
-        if (currentState === "transcribing") {
-          transitionTo("idle");
-        }
-      }, 2000);
       break;
   }
 }
@@ -62,13 +57,19 @@ async function transitionTo(state: State) {
 window.addEventListener("DOMContentLoaded", async () => {
   await listen("key-press", () => {
     if (currentState === "idle") {
-      transitionTo("recording");
+      void transitionTo("recording");
     }
   });
 
   await listen("key-release", () => {
     if (currentState === "recording") {
-      transitionTo("transcribing");
+      void transitionTo("transcribing");
+    }
+  });
+
+  await listen("transcription-complete", () => {
+    if (currentState === "transcribing") {
+      void transitionTo("idle");
     }
   });
 });
