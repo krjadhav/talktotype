@@ -13,10 +13,10 @@ pub fn run() {
                 if let Err(error) = listen(move |event: Event| {
                     match event.event_type {
                         EventType::KeyPress(Key::F8) => {
-                            let _ = listener_handle.emit("key-press", "alt");
+                            let _ = listener_handle.emit("key-press", "f8");
                         }
                         EventType::KeyRelease(Key::F8) => {
-                            let _ = listener_handle.emit("key-release", "alt");
+                            let _ = listener_handle.emit("key-release", "f8");
                         }
                         _ => {}
                     }
