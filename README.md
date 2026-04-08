@@ -1,7 +1,28 @@
-# Tauri + Vanilla TS
+# TalkToType
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Typescript.
+Push-to-talk voice input for macOS. Hold the Option key to record, release to transcribe.
 
-## Recommended IDE Setup
+## How it works
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- **Hold Option** — overlay appears at top of screen with recording animation
+- **Release Option** — switches to transcribing state, then returns to idle
+
+State machine: Idle -> Recording -> Transcribing -> Idle
+
+## Requirements
+
+- macOS with **Input Monitoring** permission (System Settings > Privacy & Security > Input Monitoring)
+- Rust, Node.js, pnpm
+
+## Development
+
+```
+pnpm install
+pnpm tauri dev
+```
+
+## Tech Stack
+
+- Tauri v2 (Rust backend, webview frontend)
+- TypeScript + Vite
+- CGEventTap for global key listening
