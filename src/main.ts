@@ -33,9 +33,17 @@ async function hideWindow() {
 function enqueueTransition(state: State) {
   transitionQueue = transitionQueue
     .then(() => applyTransition(state))
-    .catch((err) => {
+    .catch(async (err) => {
       console.error(`Transition to "${state}" failed:`, err);
-      currentState = "idle";
+      try {
+        currentState = "idle";
+        recordingIndicator().classList.add("hidden");
+        transcribingIndicator().classList.add("hidden");
+        overlay().classList.add("hidden");
+        await hideWindow();
+      } catch (recoveryErr) {
+        console.error("Recovery to idle also failed:", recoveryErr);
+      }
     });
 }
 
