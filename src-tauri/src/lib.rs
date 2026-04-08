@@ -9,18 +9,22 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             thread::spawn(move || {
-                listen(move |event: Event| {
+                let listener_handle = handle.clone();
+                if let Err(error) = listen(move |event: Event| {
                     match event.event_type {
                         EventType::KeyPress(Key::Alt) => {
-                            let _ = handle.emit("key-press", "alt");
+                            let _ = listener_handle.emit("key-press", "alt");
                         }
                         EventType::KeyRelease(Key::Alt) => {
-                            let _ = handle.emit("key-release", "alt");
+                            let _ = listener_handle.emit("key-release", "alt");
                         }
                         _ => {}
                     }
-                })
-                .expect("Could not listen for global key events");
+                }) {
+                    let error_message = format!("{error:?}");
+                    eprintln!("global key listener unavailable: {error_message}");
+                    let _ = handle.emit("global-shortcut-error", error_message);
+                }
             });
             Ok(())
         })
