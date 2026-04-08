@@ -26,6 +26,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![log_to_terminal])
         .setup(|app| {
             let handle = app.handle().clone();
+            let error_handle = handle.clone();
             let (tx, rx) = mpsc::channel::<KeyEvent>();
 
             // Thread 1: lightweight rdev callback sends events through channel
@@ -42,7 +43,9 @@ pub fn run() {
                         _ => {}
                     }
                 }) {
-                    eprintln!("[ERROR] [rust] global key listener unavailable: {error:?}");
+                    let error_message = format!("{error:?}");
+                    eprintln!("[ERROR] [rust] global key listener unavailable: {error_message}");
+                    let _ = error_handle.emit("global-shortcut-error", error_message);
                 }
                 eprintln!("[WARN] [rust] Global key listener thread exited");
             });
