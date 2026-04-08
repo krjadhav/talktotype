@@ -11,11 +11,20 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "talktotype",
-        "width": 800,
-        "height": 600
+        "width": 300,
+        "height": 100,
+        "visible": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "shadow": false,
+        "skipTaskbar": true
       }
     ],
     "security": {
