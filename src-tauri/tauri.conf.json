@@ -18,7 +18,7 @@
         "title": "talktotype",
         "width": 300,
         "height": 100,
-        "visible": false,
+        "visible": true,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,

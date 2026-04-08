@@ -8,6 +8,7 @@ type State = "idle" | "recording" | "transcribing";
 let currentState: State = "idle";
 let transitionQueue: Promise<void> = Promise.resolve();
 let transcriptionSession = 0;
+let windowPositioned = false;
 
 function log(level: string, message: string) {
   invoke("log_to_terminal", { level, message }).catch(() => {});
@@ -19,26 +20,20 @@ const recordingIndicator = () =>
 const transcribingIndicator = () =>
   document.getElementById("transcribing-indicator")!;
 
-async function showWindow() {
-  log("info", "showWindow: getting monitor info");
+async function positionWindow() {
+  if (windowPositioned) return;
   const win = getCurrentWindow();
   const monitor = await currentMonitor();
   if (monitor) {
     const screenWidth = monitor.size.width / monitor.scaleFactor;
     const windowWidth = 300;
     const x = (screenWidth - windowWidth) / 2;
-    log("info", `showWindow: positioning at (${x}, 12)`);
+    log("info", `positionWindow: positioning at (${x}, 12)`);
     await win.setPosition(new LogicalPosition(x, 12));
   }
-  log("info", "showWindow: calling show()");
   await win.show();
-  log("info", "showWindow: done");
-}
-
-async function hideWindow() {
-  log("info", "hideWindow: calling hide()");
-  await getCurrentWindow().hide();
-  log("info", "hideWindow: done");
+  windowPositioned = true;
+  log("info", "positionWindow: window shown and positioned");
 }
 
 function enqueueTransition(state: State) {
@@ -47,16 +42,10 @@ function enqueueTransition(state: State) {
     .catch(async (err) => {
       const msg = err instanceof Error ? err.message : String(err);
       log("error", `Transition to "${state}" failed: ${msg}`);
-      try {
-        currentState = "idle";
-        recordingIndicator().classList.add("hidden");
-        transcribingIndicator().classList.add("hidden");
-        overlay().classList.add("hidden");
-        await hideWindow();
-      } catch (recoveryErr) {
-        const rMsg = recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr);
-        log("error", `Recovery to idle also failed: ${rMsg}`);
-      }
+      currentState = "idle";
+      recordingIndicator().classList.add("hidden");
+      transcribingIndicator().classList.add("hidden");
+      overlay().classList.add("hidden");
     });
 }
 
@@ -69,14 +58,13 @@ async function applyTransition(state: State) {
       recordingIndicator().classList.add("hidden");
       transcribingIndicator().classList.add("hidden");
       overlay().classList.add("hidden");
-      await hideWindow();
       break;
 
     case "recording":
+      await positionWindow();
       overlay().classList.remove("hidden");
       recordingIndicator().classList.remove("hidden");
       transcribingIndicator().classList.add("hidden");
-      await showWindow();
       break;
 
     case "transcribing": {
