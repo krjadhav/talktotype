@@ -5,6 +5,7 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 type State = "idle" | "recording" | "transcribing";
 
 let currentState: State = "idle";
+let transitioning = false;
 
 const overlay = () => document.getElementById("overlay")!;
 const recordingIndicator = () =>
@@ -29,28 +30,41 @@ async function hideWindow() {
 }
 
 async function transitionTo(state: State) {
-  console.log(`State: ${currentState} -> ${state}`);
-  currentState = state;
+  if (transitioning) return;
+  transitioning = true;
 
-  switch (state) {
-    case "idle":
-      recordingIndicator().classList.add("hidden");
-      transcribingIndicator().classList.add("hidden");
-      overlay().classList.add("hidden");
-      await hideWindow();
-      break;
+  try {
+    console.log(`State: ${currentState} -> ${state}`);
+    currentState = state;
 
-    case "recording":
-      overlay().classList.remove("hidden");
-      recordingIndicator().classList.remove("hidden");
-      transcribingIndicator().classList.add("hidden");
-      await showWindow();
-      break;
+    switch (state) {
+      case "idle":
+        recordingIndicator().classList.add("hidden");
+        transcribingIndicator().classList.add("hidden");
+        overlay().classList.add("hidden");
+        await hideWindow();
+        break;
 
-    case "transcribing":
-      recordingIndicator().classList.add("hidden");
-      transcribingIndicator().classList.remove("hidden");
-      break;
+      case "recording":
+        overlay().classList.remove("hidden");
+        recordingIndicator().classList.remove("hidden");
+        transcribingIndicator().classList.add("hidden");
+        await showWindow();
+        break;
+
+      case "transcribing":
+        recordingIndicator().classList.add("hidden");
+        transcribingIndicator().classList.remove("hidden");
+        // TODO: replace with real transcription-complete event from backend
+        setTimeout(() => {
+          if (currentState === "transcribing") {
+            void transitionTo("idle");
+          }
+        }, 2000);
+        break;
+    }
+  } finally {
+    transitioning = false;
   }
 }
 
