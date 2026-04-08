@@ -1,7 +1,18 @@
 use std::sync::mpsc;
 use std::thread;
-use rdev::{listen, Event, EventType, Key};
 use tauri::Emitter;
+
+use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
+use core_graphics::event::{
+    CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
+    CallbackResult,
+};
+
+// macOS virtual key code for Option/Alt
+const KEY_CODE_OPTION: u16 = 58;
+const KEY_CODE_RIGHT_OPTION: u16 = 61;
+// macOS event flag bit for Option/Alternate
+const FLAG_OPTION: u64 = 0x80000;
 
 #[derive(Debug)]
 enum KeyEvent {
@@ -19,6 +30,10 @@ fn log_to_terminal(level: String, message: String) {
     eprintln!("{prefix} [webview] {message}");
 }
 
+fn is_option_key(keycode: u16) -> bool {
+    keycode == KEY_CODE_OPTION || keycode == KEY_CODE_RIGHT_OPTION
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -29,25 +44,59 @@ pub fn run() {
             let error_handle = handle.clone();
             let (tx, rx) = mpsc::channel::<KeyEvent>();
 
-            // Thread 1: lightweight rdev callback sends events through channel
+            // Thread 1: CGEventTap for global key events (no string conversion)
             thread::spawn(move || {
-                eprintln!("[INFO] [rust] Global key listener starting...");
-                if let Err(error) = listen(move |event: Event| {
-                    match event.event_type {
-                        EventType::KeyPress(Key::Alt) => {
-                            let _ = tx.send(KeyEvent::Press);
+                eprintln!("[INFO] [rust] Global key listener starting (CGEventTap)...");
+
+                let tap = CGEventTap::new(
+                    CGEventTapLocation::Session,
+                    CGEventTapPlacement::HeadInsertEventTap,
+                    CGEventTapOptions::ListenOnly,
+                    vec![CGEventType::FlagsChanged],
+                    {
+                        let tx = tx.clone();
+                        move |_proxy, _event_type, event| {
+                            let keycode = event.get_integer_value_field(
+                                core_graphics::event::EventField::KEYBOARD_EVENT_KEYCODE,
+                            ) as u16;
+
+                            if is_option_key(keycode) {
+                                let flags = event.get_flags();
+                                if flags.bits() & FLAG_OPTION != 0 {
+                                    let _ = tx.send(KeyEvent::Press);
+                                } else {
+                                    let _ = tx.send(KeyEvent::Release);
+                                }
+                            }
+
+                            CallbackResult::Keep
                         }
-                        EventType::KeyRelease(Key::Alt) => {
-                            let _ = tx.send(KeyEvent::Release);
+                    },
+                );
+
+                match tap {
+                    Ok(tap) => {
+                        unsafe {
+                            let loop_source = tap
+                                .mach_port()
+                                .create_runloop_source(0)
+                                .expect("Failed to create runloop source");
+                            let run_loop = CFRunLoop::get_current();
+                            run_loop.add_source(&loop_source, kCFRunLoopCommonModes);
+                            tap.enable();
+                            eprintln!("[INFO] [rust] CGEventTap enabled, entering run loop");
+                            CFRunLoop::run_current();
                         }
-                        _ => {}
+                        eprintln!("[WARN] [rust] CGEventTap run loop exited");
                     }
-                }) {
-                    let error_message = format!("{error:?}");
-                    eprintln!("[ERROR] [rust] global key listener unavailable: {error_message}");
-                    let _ = error_handle.emit("global-shortcut-error", error_message);
+                    Err(()) => {
+                        eprintln!("[ERROR] [rust] Failed to create CGEventTap - accessibility permission required");
+                        let _ = error_handle.emit(
+                            "global-shortcut-error",
+                            "Failed to create event tap. Grant accessibility permission.".to_string(),
+                        );
+                    }
                 }
-                eprintln!("[WARN] [rust] Global key listener thread exited");
             });
 
             // Thread 2: receives key events and emits to webview
@@ -56,11 +105,11 @@ pub fn run() {
                 for event in rx {
                     match event {
                         KeyEvent::Press => {
-                            eprintln!("[INFO] [rust] Key::Alt pressed");
+                            eprintln!("[INFO] [rust] Option key pressed");
                             let _ = handle.emit("key-press", "alt");
                         }
                         KeyEvent::Release => {
-                            eprintln!("[INFO] [rust] Key::Alt released");
+                            eprintln!("[INFO] [rust] Option key released");
                             let _ = handle.emit("key-release", "alt");
                         }
                     }
