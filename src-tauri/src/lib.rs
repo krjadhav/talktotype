@@ -12,11 +12,11 @@ pub fn run() {
                 let listener_handle = handle.clone();
                 if let Err(error) = listen(move |event: Event| {
                     match event.event_type {
-                        EventType::KeyPress(Key::F8) => {
-                            let _ = listener_handle.emit("key-press", "f8");
+                        EventType::KeyPress(Key::Alt) => {
+                            let _ = listener_handle.emit("key-press", "alt");
                         }
-                        EventType::KeyRelease(Key::F8) => {
-                            let _ = listener_handle.emit("key-release", "f8");
+                        EventType::KeyRelease(Key::Alt) => {
+                            let _ = listener_handle.emit("key-release", "alt");
                         }
                         _ => {}
                     }
