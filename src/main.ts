@@ -5,7 +5,8 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 type State = "idle" | "recording" | "transcribing";
 
 let currentState: State = "idle";
-let transitioning = false;
+let transitionQueue: Promise<void> = Promise.resolve();
+let transcriptionSession = 0;
 
 const overlay = () => document.getElementById("overlay")!;
 const recordingIndicator = () =>
@@ -29,42 +30,41 @@ async function hideWindow() {
   await getCurrentWindow().hide();
 }
 
-async function transitionTo(state: State) {
-  if (transitioning) return;
-  transitioning = true;
+function enqueueTransition(state: State) {
+  transitionQueue = transitionQueue.then(() => applyTransition(state));
+}
 
-  try {
-    console.log(`State: ${currentState} -> ${state}`);
-    currentState = state;
+async function applyTransition(state: State) {
+  console.log(`State: ${currentState} -> ${state}`);
+  currentState = state;
 
-    switch (state) {
-      case "idle":
-        recordingIndicator().classList.add("hidden");
-        transcribingIndicator().classList.add("hidden");
-        overlay().classList.add("hidden");
-        await hideWindow();
-        break;
+  switch (state) {
+    case "idle":
+      recordingIndicator().classList.add("hidden");
+      transcribingIndicator().classList.add("hidden");
+      overlay().classList.add("hidden");
+      await hideWindow();
+      break;
 
-      case "recording":
-        overlay().classList.remove("hidden");
-        recordingIndicator().classList.remove("hidden");
-        transcribingIndicator().classList.add("hidden");
-        await showWindow();
-        break;
+    case "recording":
+      overlay().classList.remove("hidden");
+      recordingIndicator().classList.remove("hidden");
+      transcribingIndicator().classList.add("hidden");
+      await showWindow();
+      break;
 
-      case "transcribing":
-        recordingIndicator().classList.add("hidden");
-        transcribingIndicator().classList.remove("hidden");
-        // TODO: replace with real transcription-complete event from backend
-        setTimeout(() => {
-          if (currentState === "transcribing") {
-            void transitionTo("idle");
-          }
-        }, 2000);
-        break;
+    case "transcribing": {
+      recordingIndicator().classList.add("hidden");
+      transcribingIndicator().classList.remove("hidden");
+      // TODO: replace with real transcription-complete event from backend
+      const session = ++transcriptionSession;
+      setTimeout(() => {
+        if (currentState === "transcribing" && session === transcriptionSession) {
+          enqueueTransition("idle");
+        }
+      }, 2000);
+      break;
     }
-  } finally {
-    transitioning = false;
   }
 }
 
@@ -79,19 +79,19 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await listen("key-press", () => {
     if (currentState === "idle") {
-      void transitionTo("recording");
+      enqueueTransition("recording");
     }
   });
 
   await listen("key-release", () => {
     if (currentState === "recording") {
-      void transitionTo("transcribing");
+      enqueueTransition("transcribing");
     }
   });
 
   await listen("transcription-complete", () => {
     if (currentState === "transcribing") {
-      void transitionTo("idle");
+      enqueueTransition("idle");
     }
   });
 });
