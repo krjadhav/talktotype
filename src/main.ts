@@ -77,7 +77,7 @@ async function applyTransition(state: State) {
           log("info", "Transcription timeout fired, transitioning to idle");
           enqueueTransition("idle");
         }
-      }, 2000);
+      }, 700);
       break;
     }
   }
