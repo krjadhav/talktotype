@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor } from "@tauri-apps/api/window";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
@@ -8,6 +9,10 @@ let currentState: State = "idle";
 let transitionQueue: Promise<void> = Promise.resolve();
 let transcriptionSession = 0;
 
+function log(level: string, message: string) {
+  invoke("log_to_terminal", { level, message }).catch(() => {});
+}
+
 const overlay = () => document.getElementById("overlay")!;
 const recordingIndicator = () =>
   document.getElementById("recording-indicator")!;
@@ -15,26 +20,33 @@ const transcribingIndicator = () =>
   document.getElementById("transcribing-indicator")!;
 
 async function showWindow() {
+  log("info", "showWindow: getting monitor info");
   const win = getCurrentWindow();
   const monitor = await currentMonitor();
   if (monitor) {
     const screenWidth = monitor.size.width / monitor.scaleFactor;
     const windowWidth = 300;
     const x = (screenWidth - windowWidth) / 2;
+    log("info", `showWindow: positioning at (${x}, 12)`);
     await win.setPosition(new LogicalPosition(x, 12));
   }
+  log("info", "showWindow: calling show()");
   await win.show();
+  log("info", "showWindow: done");
 }
 
 async function hideWindow() {
+  log("info", "hideWindow: calling hide()");
   await getCurrentWindow().hide();
+  log("info", "hideWindow: done");
 }
 
 function enqueueTransition(state: State) {
   transitionQueue = transitionQueue
     .then(() => applyTransition(state))
     .catch(async (err) => {
-      console.error(`Transition to "${state}" failed:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      log("error", `Transition to "${state}" failed: ${msg}`);
       try {
         currentState = "idle";
         recordingIndicator().classList.add("hidden");
@@ -42,13 +54,14 @@ function enqueueTransition(state: State) {
         overlay().classList.add("hidden");
         await hideWindow();
       } catch (recoveryErr) {
-        console.error("Recovery to idle also failed:", recoveryErr);
+        const rMsg = recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr);
+        log("error", `Recovery to idle also failed: ${rMsg}`);
       }
     });
 }
 
 async function applyTransition(state: State) {
-  console.log(`State: ${currentState} -> ${state}`);
+  log("info", `State: ${currentState} -> ${state}`);
   currentState = state;
 
   switch (state) {
@@ -73,6 +86,7 @@ async function applyTransition(state: State) {
       const session = ++transcriptionSession;
       setTimeout(() => {
         if (currentState === "transcribing" && session === transcriptionSession) {
+          log("info", "Transcription timeout fired, transitioning to idle");
           enqueueTransition("idle");
         }
       }, 2000);
@@ -82,8 +96,10 @@ async function applyTransition(state: State) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  log("info", "App initialized");
+
   await listen<string>("global-shortcut-error", ({ payload }) => {
-    console.error("Global key listener unavailable:", payload);
+    log("error", `Global key listener unavailable: ${payload}`);
     alert(
       "TalkToType needs macOS Accessibility / Input Monitoring permission to capture the global hotkey. " +
         "Grant it in System Settings > Privacy & Security > Input Monitoring, then relaunch the app."
@@ -91,18 +107,21 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   await listen("key-press", () => {
+    log("info", `key-press received, currentState=${currentState}`);
     if (currentState === "idle") {
       enqueueTransition("recording");
     }
   });
 
   await listen("key-release", () => {
+    log("info", `key-release received, currentState=${currentState}`);
     if (currentState === "recording") {
       enqueueTransition("transcribing");
     }
   });
 
   await listen("transcription-complete", () => {
+    log("info", `transcription-complete received, currentState=${currentState}`);
     if (currentState === "transcribing") {
       enqueueTransition("idle");
     }
