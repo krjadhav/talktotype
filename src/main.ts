@@ -55,6 +55,14 @@ async function transitionTo(state: State) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  await listen<string>("global-shortcut-error", ({ payload }) => {
+    console.error("Global key listener unavailable:", payload);
+    alert(
+      "TalkToType needs macOS Accessibility / Input Monitoring permission to capture the global hotkey. " +
+        "Grant it in System Settings > Privacy & Security > Input Monitoring, then relaunch the app."
+    );
+  });
+
   await listen("key-press", () => {
     if (currentState === "idle") {
       void transitionTo("recording");
